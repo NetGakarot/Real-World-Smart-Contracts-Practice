@@ -49,6 +49,14 @@ contract MyToken{
         return true;
     }
 
+    function approve(address _spender, uint _value) public returns(bool) {
+        if (_value == 0) {revert AmountZero();}
+        uint _amount = _value * DECIMALS_FACTOR;
+        allowance[msg.sender][_spender] += _amount;
+        emit AllowanceStatus(msg.sender, _spender, _amount, "Increased");
+        return true;
+    }
+
     function increaseAllowance(address _spender, uint _value) public returns(bool) {
         if (_value == 0) {revert AmountZero();}
         uint _amount = _value * DECIMALS_FACTOR;
@@ -95,6 +103,10 @@ contract MyToken{
         totalSupply += _amount;
         emit SupplyChanged(_amount, "Mint");
         return true;
+    }
+
+    function getAnyonesBalance(address user) public view onlyOwner returns(uint) {
+        return balanceOf[user];
     }
 
 }
