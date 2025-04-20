@@ -7,147 +7,160 @@ Game NFTs are mintable by game engine. Players can transfer. Use interface + ext
 */
 
 interface IERC721Receiver {
-    function onERC721Received(address operator, address from, uint256 _tokenId, bytes calldata data) external returns (bytes4);
+    function onERC721Received(address _from, address _spender, uint _tokenId, bytes calldata data) external returns(bytes4);
 }
 
-contract MyContract {
+error NotAuthorized(string note);
+error InvalidAddress();
+error ContractAddress(string note);
+error ReceiverInvalid();
+
+contract MyERC721 {
     string public name = "Gakarot";
-    string public symbol = "Gak";
+    string public symbol = "GKT";
+
 
     address public admin;
     uint public totalSupply;
 
+
     mapping(uint => address) private owners;
     mapping(address => uint) private balances;
-    mapping(uint => string) private tokenURIs;
-    mapping(uint => address) public tokenApprovals;
+    mapping(uint => string) private tokenUri;
+    mapping(uint => address) private tokenApproval;
     mapping(address => mapping(address => bool)) public approvedForAll;
-    
-    event Transfer(address indexed from, address indexed to, uint indexed _tokenId);
-    event Approval(address indexed _owner, address indexed _approved, uint256 indexed _tokenId);
-    event ApprovalForAll(address indexed _owner, address indexed _operator, bool _approved);
+
+    event Transfer(address indexed _from, address indexed _to, uint indexed _tokenId);
+    event Approval(address indexed _owner, address indexed _spender, uint indexed _tokenId);
+    event ApprovalForAll(address indexed _owner, address indexed _spender, bool approved);
 
     constructor() {
         admin = msg.sender;
     }
 
-    modifier onlyBy() {
-        require(msg.sender == admin,"Not authorized");
-        _;
-    }
-
-    function changeAdmin(address newAdmin) public onlyBy {
-        require(newAdmin != address(0),"Invalid address");
+    function changeAdmin(address newAdmin) external {
+        if(msg.sender != admin) revert NotAuthorized("Only Admin allowed");
+        if(newAdmin == address(0)) revert InvalidAddress();
         admin = newAdmin;
     }
 
-    function mint(address to, string memory tokenURI) external onlyBy {
-        require(to != address(0), "Invalid address");
+    function mint(address _to, string memory _tokenUri) external {
+        if(msg.sender != admin) revert NotAuthorized("Only Admin allowed");
 
         totalSupply++;
         uint tokenId = totalSupply;
 
-        owners[tokenId] = to;
-        balances[to]++;
-        tokenURIs[tokenId] = tokenURI;
-
-        emit Transfer(address(0), to, tokenId);
-    }
-
-    function burn(uint tokenId) external onlyBy {
-
-        address owner = owners[tokenId];
-        delete owners[tokenId];
-        balances[owner]--;
-        delete tokenURIs[tokenId];
-        emit Transfer(owner, address(0), tokenId);
-    }
-
-    function getOwnerOf(uint tokenId) external view returns (address) {
-        require(owners[tokenId] != address(0), "Token doesn't exist");
-        return owners[tokenId];
-    }
-
-    function getTokenURI(uint tokenId) external view returns (string memory) {
-        require(owners[tokenId] != address(0), "Token doesn't exist");
-        return tokenURIs[tokenId];
-    }
-
-    function transfer(address to, uint tokenId) external {
-        require(owners[tokenId] == msg.sender, "Not the owner");
-        require(to != address(0), "Invalid recipient");
-
-        owners[tokenId] = to;
-        balances[msg.sender]--;
-        balances[to]++;
-        emit Transfer(msg.sender, to, tokenId);
-    }
-
-    function approve(address operator, uint tokenId) external {
-        require(owners[tokenId] == msg.sender,"Not the owner");
-        require(operator != owners[tokenId],"Cant approve yourself");
-        tokenApprovals[tokenId] = operator;
-        emit Approval(msg.sender, operator, tokenId);
-    }
-
-    function getApproved(uint256 tokenId) external view returns (address) {
-        return tokenApprovals[tokenId];
-    }
-
-    function setApprovalForAll(address _operator, bool _approved) external {
-        require(_operator != msg.sender, "Cannot approve yourself");
-        approvedForAll[msg.sender][_operator] = _approved;
-        emit ApprovalForAll(msg.sender, _operator, _approved);
-    }
-
-    function isApprovedForAll(address _owner, address _operator) external view returns (bool) {
-        return approvedForAll[_owner][_operator];
-    }
-
-    function transferFrom(address _from, address _to, uint256 tokenId) external {
-        require(tokenApprovals[tokenId] == msg.sender || approvedForAll[_from][msg.sender],"Not authorized");
-        require(owners[tokenId] == _from, "Incorrect from");
-        require(_to != address(0), "Cannot transfer to zero address");
-        delete tokenApprovals[tokenId];
         owners[tokenId] = _to;
-        balances[_from]--;
         balances[_to]++;
-        emit Transfer(_from, _to, tokenId);
+        tokenUri[tokenId] = _tokenUri;
+        emit Transfer(msg.sender, _to, tokenId);
     }
 
-    function isContract(address _addr) internal view returns (bool) {
+    function burn(uint _tokenId) external {
+        if(msg.sender != admin) revert NotAuthorized("Only Admin allowed");
+        address owner = owners[_tokenId];
+        delete owners[_tokenId];
+        balances[owner]--;
+        delete tokenUri[_tokenId];
+        emit Transfer(owner, address(0), _tokenId);
+    }
+
+    function OwnerOf(uint _tokenId) external view returns(address) {
+        return owners[_tokenId];
+    }
+
+    function balanceOf(address user) external view returns(uint) {
+        return balances[user];
+    }
+
+    function getTokenUri(uint _tokenId) external view returns(string memory) {
+        return tokenUri[_tokenId];
+    }
+
+    function changeUri(uint _tokenId, string memory _newTokenUri) external {
+        if(msg.sender != admin) revert NotAuthorized("Only Admin allowed");
+        tokenUri[_tokenId] = _newTokenUri; 
+    }
+
+    function isContract(address user) internal view returns(bool) {
         uint32 size;
         assembly {
-        size := extcodesize(_addr)
+            size := extcodesize(user)
         }
-        return (size > 0);
+        return(size > 0);
     }
 
+    function transfer(address _to, uint _tokenId) external {
+        if(isContract(_to)) revert ContractAddress("Its a contract address use SafeTransferFrom");
+        if(msg.sender != owners[_tokenId]) revert NotAuthorized("You do not own this NFT");
+        if(_to == address(0)) revert InvalidAddress();
 
-    function safeTransferFrom(address _from, address _to, uint256 tokenId) external {
-        require(tokenApprovals[tokenId] == msg.sender || approvedForAll[_from][msg.sender],"Not authorized");
-        require(owners[tokenId] == _from, "Incorrect from");
-        require(_to != address(0), "Cannot transfer to zero address");
-        if (isContract(_to)) {
-            try IERC721Receiver(_to).onERC721Received(msg.sender, _from, tokenId, "") returns (bytes4 retval) {
-            require(retval == IERC721Receiver(_to).onERC721Received.selector, "Receiver not implemented properly");
-        } catch {
-        revert("Receiver contract can't handle NFTs");
-        }
+        owners[_tokenId] = _to;
+        balances[msg.sender]--;
+        balances[_to]++;
+        emit Transfer(msg.sender, _to, _tokenId);
+    }
 
-        delete tokenApprovals[tokenId];
-        owners[tokenId] = _to;
+    function approve(address _spender, uint _tokenId) external {
+        if(msg.sender != owners[_tokenId]) revert NotAuthorized("You do not own this NFT");
+        if(_spender == address(0)) revert InvalidAddress();
+
+        tokenApproval[_tokenId] = _spender;
+        emit Approval(msg.sender, _spender, _tokenId); 
+    }
+
+    function getApproved(uint _tokenId) external view returns(address) {
+        return tokenApproval[_tokenId];
+    }
+
+    function setApprovalForAll(address _spender, bool _approved) external {
+        if(_spender == address(0)) revert InvalidAddress();
+        if(_spender == msg.sender) revert InvalidAddress();
+        approvedForAll[msg.sender][_spender] = _approved;
+        emit ApprovalForAll(msg.sender, _spender, _approved);
+    }
+
+    function isApprovedForAll(address _owner, address _spender) external view returns(bool) {
+        return approvedForAll[_owner][_spender];
+    }
+
+    function transferFrom(address _from, address _to, uint _tokenId) external {
+        if(isContract(_to)) revert ContractAddress("Its a contract address use SafeTransferFrom");
+        if (
+            msg.sender != owners[_tokenId] &&
+            msg.sender != tokenApproval[_tokenId] &&
+            !approvedForAll[_from][msg.sender]
+            ) revert NotAuthorized("Not owner or approved");
+        if(_to == address(0)) revert InvalidAddress();
+        delete tokenApproval[_tokenId];
+        owners[_tokenId] = _to;
         balances[_from]--;
         balances[_to]++;
-        emit Transfer(_from, _to, tokenId);
+        emit Transfer(_from, _to, _tokenId);
+    }
+
+    function safeTransferFrom(address _from, address _to, uint _tokenId) external {
+        if (
+            msg.sender != owners[_tokenId] &&
+            msg.sender != tokenApproval[_tokenId] &&
+            !approvedForAll[_from][msg.sender]
+            ) revert NotAuthorized("Not owner or approved");
+
+        if(isContract(_to)) {
+            try IERC721Receiver(_to).onERC721Received(_from, msg.sender, _tokenId, "") returns(bytes4 retval)  {
+            if (retval != IERC721Receiver(_to).onERC721Received.selector)
+                revert ReceiverInvalid();
+            } catch {
+                revert("Receiver contract can't handle NFT's");
+            }
         }
-
+        delete tokenApproval[_tokenId];
+        owners[_tokenId] = _to;
+        balances[_from]--;
+        balances[_to]++;
+        emit Transfer(_from, _to, _tokenId);
     }
 
-    function changeURI(uint tokenId, string memory newTokenURI) external {
-            require(owners[tokenId] == msg.sender,"Not the owner");
-            tokenURIs[tokenId] = newTokenURI;
-    }
 }
 
 
