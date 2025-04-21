@@ -56,7 +56,7 @@ contract Caller {
         return p.getValueC();
     }
 
-    function changeOwner(address newOwner) external {
+    function changeOwner(address newOwner) external onlyAdmin {
         p.changeOwner(newOwner);
     }
 }
