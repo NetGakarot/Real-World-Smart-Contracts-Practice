@@ -201,6 +201,7 @@ contract ERC721NFT is IERC165 {
 
     function supportsInterface(bytes4 interfaceId) public pure override returns (bool) {
         return interfaceId == _ERC721_INTERFACE_ID;
+    }
 }
 
 
