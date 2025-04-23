@@ -4,8 +4,11 @@ pragma solidity ^0.8.0;
 interface IERC721Receiver {
     function onERC721Received(address _from, address _spender, uint _tokenId, bytes calldata data) external returns(bytes4);
 }
+interface IERC165 {
+    function supportsInterface(bytes4 interfaceId) external view returns (bool);
+}
 
-contract ERC721NFT {
+contract ERC721NFT is IERC165 {
 
     error OnlyAdmin();
     error NotTheOwner();
@@ -193,6 +196,11 @@ contract ERC721NFT {
     function safeTransferFrom(address _from, address _to, uint _tokenId, bytes calldata data) external virtual {
         _safeTransferFrom(_from, _to, _tokenId, data);
     }
+
+    bytes4 private constant _ERC721_INTERFACE_ID = 0x80ac58cd;
+
+    function supportsInterface(bytes4 interfaceId) public pure override returns (bool) {
+        return interfaceId == _ERC721_INTERFACE_ID;
 }
 
 
