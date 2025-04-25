@@ -1,0 +1,77 @@
+// SPDX-License-Identifier:MIT
+pragma solidity ^0.8.0;
+
+interface IERC1363Receiver {
+    function onTransferReceived(address operator, address from, uint value, bytes calldata data) external returns(bytes4);
+}
+
+interface IERC1363Spender {
+    function onApprovalReceived(address owner, uint value, bytes calldata data) external returns(bytes4);
+}
+
+import "./ERC20.sol";
+
+contract ERC1363 is ERC20 {
+    address admin;
+
+    constructor() ERC20(180000) {
+        admin = msg.sender;
+    }
+
+    bytes4 internal constant RECEIVED = 0x88a7ca5c;
+    bytes4 internal constant APPROVED = 0x7b04a2d0;
+
+    function changeOwnerShip(address newAdmin) external {
+        require(msg.sender == admin,"Only admin access");
+        require(newAdmin != address(0),"Invalid address");
+        admin = newAdmin;
+    }
+
+    function transferAndCall(address to, uint value) public returns(bool) {
+        return transfer(to,value);
+        
+    }
+
+    function transferAndCall(address to, uint value, bytes memory data) public returns(bool) {
+        transfer(to,value);
+        require(_checkOnTransferReceived(msg.sender, msg.sender,to,value,data),"Receiver rejected tokens");
+        return true;
+    }
+
+    function approveAndCall(address spender, uint value) public returns(bool) {
+        return approve(spender,value);
+    }
+   
+    function approveAndCall(address spender, uint value,bytes calldata data) public returns(bool) {
+        approve(spender,value);
+        require(_checkOnApprovalReceived(msg.sender,spender,value,data),"Receiver rejected tokens");
+        return true;
+    }
+
+    function _checkOnTransferReceived(address operator, address from, address to, uint value, bytes memory data) internal returns(bool) {
+        if(isContract(to)) {
+            try IERC1363Receiver(to).onTransferReceived(operator, from, value, data) returns(bytes4 retval) {
+                return retval == RECEIVED;
+            } catch {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function _checkOnApprovalReceived(address owner, address spender, uint value, bytes calldata data) internal returns(bool) {
+        if(isContract(spender)) {
+            try IERC1363Spender(spender).onApprovalReceived(owner, value, data) returns(bytes4 retval) {
+                return retval == APPROVED;
+            } catch {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function isContract(address account) public view returns(bool) {
+        return account.code.length > 0;
+    }
+       
+}
